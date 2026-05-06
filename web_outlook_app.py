@@ -20,10 +20,10 @@ SEGMENT_FILES = (
     "06_routes_temp_email.py",
     "07_routes_oauth_settings_external.py",
     "08_forwarding_scheduler_errors.py",
+    "09_routes_system_update.py",
 )
 
 SEGMENTS_DIR = Path(__file__).resolve().parent / "outlook_web" / "segments"
-
 
 def _load_segmented_app():
     if globals().get("_SEGMENTED_APP_LOADED"):
