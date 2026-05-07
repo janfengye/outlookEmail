@@ -2,7 +2,7 @@
 
 一个面向多邮箱账号场景的邮件管理工具，支持通过 Outlook/Hotmail OAuth、Microsoft Graph API 和标准 IMAP 统一读取、管理和转发邮件，并提供 Web 界面用于分组管理、账号管理、邮件查看和对外 API 调用。当前支持 Outlook/Hotmail、Gmail、QQ、163、126、Yahoo、阿里邮箱以及自定义 IMAP 邮箱，同时集成 GPTMail、DuckMail、Cloudflare Temp Email 多提供商临时邮箱能力。
 ## 📦 快速开始
-### 体验站点
+### 体验站点（可能非最新版本）
 https://aso.de5.net
 admin123
 注意：体验站点请勿修改密码或存放实际数据，部署在无持久化的服务上，数据随时可能丢失恢复初始状态
@@ -172,7 +172,7 @@ services:
 - ✅ **批量选择** - 邮箱列表、邮件列表均支持全选当前列表与清空选择
 - 🗑️ **邮件删除** - 单封/批量永久删除邮件
 - 🔄 **API 优先级回退** - Graph API → IMAP(新) → IMAP(旧) 自动回退
-- 🔑 **对外 API** - 通过 API Key 直接获取邮件，无需登录，支持别名邮箱、聚合文件夹和多条件筛选 带+号的附加电子邮箱自动识别，自动回退主邮箱/别名邮箱查询
+- 🔑 **对外 API** - 通过 API Key 直接获取邮件，无需登录，支持别名邮箱、聚合文件夹和多条件筛选 带+号的附加电子邮箱自动识别，自动回退主邮箱/别名邮箱查询；如果要求的功能比较完善，建议直接对接完整API，文档已经改成了适合AI读取的形状，直接喂给AI让AI按照完整API使用登录密码而不是API Key对接即可
 
 #### 邮件转发
 - 📮 **按账号开启转发** - 每个账号单独控制是否参与自动转发
@@ -434,7 +434,7 @@ curl -H "X-API-Key: your-api-key" \
 | [🚀 部署指南](docs/deployment.md) | Docker、Docker Compose、Nginx/Caddy 部署、环境变量配置 |
 | [⬆️ 升级指南](docs/upgrade.md) | Windows、Docker、Python 直跑升级与回滚建议 |
 | [🔐 安全配置](docs/security.md) | XSS/CSRF 防护、数据加密、速率限制、审计日志 |
-| [📡 API 文档](docs/api.md) | 对外 API、内部 API 端点、代理配置 |
+| [📡 API 文档](docs/api.md) | 对外简易API、完整API、代理配置 |
 | [🛠️ 故障排查](docs/troubleshooting.md) | 常见问题、故障排查步骤 |
 | [📋 更新日志](CHANGELOG.md) | 版本更新历史 |
 | [🚢 发版说明](RELEASE.md) | 标准发版步骤、版本号规则、GitHub Release 说明 |
