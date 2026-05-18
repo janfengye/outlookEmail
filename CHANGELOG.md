@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Fixed
+- 修复 Outlook Refresh Token 遇到 `AADSTS70000` scope 未授权/过期响应时未继续回退到旧 `.default` 或无 scope 刷新方式的问题。
+- Outlook Refresh Token 在 Graph 刷新失败后会继续尝试 IMAP OAuth 刷新，并保存 IMAP 返回的轮换 `refresh_token`。
+
+## [2.0.48] - 2026-05-18
+
+### Fixed
+- 修复部分 Outlook Refresh Token 在 `.default` Graph scope 下刷新失败并返回 `AADSTS90023` 的问题；Graph token 获取现在优先使用授权时的显式委托 scope，并在刷新检测中保留无 scope 兼容回退。
+
 ## [2.0.47] - 2026-05-18
 
 ### Added
