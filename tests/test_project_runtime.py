@@ -899,6 +899,52 @@ class ProjectRuntimeTests(unittest.TestCase):
         self.assertEqual(put_mock.call_args.kwargs['auth'], ('dav-user', 'dav-pass'))
         self.assertEqual(delete_mock.call_args.kwargs['auth'], ('dav-user', 'dav-pass'))
 
+    def test_webdav_backup_test_404_explains_missing_directory(self):
+        class PutResponseStub:
+            status_code = 404
+
+        with patch.object(web_outlook_app.requests, 'put', return_value=PutResponseStub()):
+            response = self.client.post(
+                '/api/settings/test-webdav-backup',
+                json={
+                    'config': {
+                        'url': 'https://dav.jianguoyun.com/dav',
+                        'username': 'dav-user',
+                        'password': 'dav-pass',
+                    }
+                }
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertFalse(payload['success'])
+        self.assertEqual(payload['status_code'], 404)
+        self.assertIn('目标目录不存在', payload['error'])
+        self.assertIn('https://dav.jianguoyun.com/dav/mailBackup', payload['error'])
+
+    def test_webdav_backup_test_409_explains_path_conflict(self):
+        class PutResponseStub:
+            status_code = 409
+
+        with patch.object(web_outlook_app.requests, 'put', return_value=PutResponseStub()):
+            response = self.client.post(
+                '/api/settings/test-webdav-backup',
+                json={
+                    'config': {
+                        'url': 'https://dav.jianguoyun.com/dav/mailBackup',
+                        'username': 'dav-user',
+                        'password': 'dav-pass',
+                    }
+                }
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertFalse(payload['success'])
+        self.assertEqual(payload['status_code'], 409)
+        self.assertIn('目标路径冲突', payload['error'])
+        self.assertIn('先创建 mailBackup 文件夹', payload['error'])
+
     def test_manual_webdav_upload_requires_login_password(self):
         self._insert_account('manual-upload@example.com', group_id=1)
         with self.app.app_context():
@@ -1070,6 +1116,7 @@ class FrontendTimezoneBootstrapTests(unittest.TestCase):
     def test_webdav_backup_settings_ui_is_present(self):
         settings_html = pathlib.Path(ROOT_DIR, 'templates', 'partials', 'index', 'dialogs-management.html').read_text(encoding='utf-8')
         settings_js = pathlib.Path(ROOT_DIR, 'static', 'js', 'index', '07-settings.js').read_text(encoding='utf-8')
+        settings_css = pathlib.Path(ROOT_DIR, 'static', 'css', 'index', '06-modals-toast.css').read_text(encoding='utf-8')
 
         self.assertIn('id="settingsWebdavBackupSection"', settings_html)
         self.assertIn('id="webdavBackupEnabled"', settings_html)
@@ -1078,6 +1125,10 @@ class FrontendTimezoneBootstrapTests(unittest.TestCase):
         self.assertIn('id="testWebdavBackupBtn"', settings_html)
         self.assertIn('id="uploadWebdavBackupBtn"', settings_html)
         self.assertIn('id="webdavBackupTestResult"', settings_html)
+        self.assertIn('请先在 WebDAV 服务中创建目录', settings_html)
+        self.assertIn('https://dav.jianguoyun.com/dav/mailBackup', settings_html)
+        self.assertLess(settings_html.index('id="webdavBackupPassword"'), settings_html.index('id="testWebdavBackupBtn"'))
+        self.assertLess(settings_html.index('id="testWebdavBackupBtn"'), settings_html.index('id="webdavBackupCron"'))
         self.assertIn('selectWebdavBackupCronExample', settings_html)
         self.assertIn('async function validateWebdavBackupCronExpression()', settings_js)
         self.assertIn('async function testWebdavBackup()', settings_js)
@@ -1086,6 +1137,9 @@ class FrontendTimezoneBootstrapTests(unittest.TestCase):
         self.assertIn("fetch('/api/settings/upload-webdav-backup'", settings_js)
         self.assertIn('expected_fields: 5', settings_js)
         self.assertIn('settings.webdav_backup_verify_password = webdavBackupVerifyPassword;', settings_js)
+        self.assertIn('.settings-sidebar-list', settings_css)
+        self.assertIn('overflow-y: auto;', settings_css)
+        self.assertIn('scrollbar-width: thin;', settings_css)
 
     def test_temp_email_list_uses_selected_tag_filters(self):
         temp_js = pathlib.Path(ROOT_DIR, 'static', 'js', 'index', '03-temp-emails.js').read_text(encoding='utf-8')
