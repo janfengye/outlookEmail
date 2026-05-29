@@ -1,4 +1,4 @@
-        /* global accountPaginationState, accountsCache, clearEmailSelection, closeModal, copyTextToClipboard, currentAccount, currentAccountListSource, currentEmailDetail, currentGroupId, deleteAccount, getSelectedForwardChannels, handleApiError, hideModal, invalidateAccountCaches, isTempEmailGroup, loadAccountsByGroup, loadGroups, loadTags, refreshVisibleAccountList, renderEmailList, selectedEmailIds, setModalVisible, showModal, showToast, updateBatchActionBar */
+        /* global accountPaginationState, accountsCache, clearEmailSelection, closeModal, copyTextToClipboard, currentAccount, currentAccountListSource, currentEmailDetail, currentGroupId, deleteAccount, getSelectedForwardChannels, handleApiError, hideModal, invalidateAccountCaches, isTempEmailGroup, loadAccountsByGroup, loadGroups, loadTags, refreshVisibleAccountList, renderEmailList, selectedEmailIds, setModalVisible, showModal, showToast, startSelectedAccountExport, updateBatchActionBar */
 
         // ==================== 批量操作 ====================
 
@@ -218,8 +218,10 @@
             const selectAllBtn = document.getElementById('accountSelectAllBtn');
             const batchRefreshBtn = document.getElementById('batchRefreshTokensBtn');
             const batchCopyBtn = document.getElementById('batchCopyEmailsBtn');
+            const batchExportBtn = document.getElementById('batchExportAccountsBtn');
             const batchEnableForwardingBtn = document.getElementById('batchEnableForwardingBtn');
             const batchDisableForwardingBtn = document.getElementById('batchDisableForwardingBtn');
+            const batchProxyBtn = document.getElementById('batchProxyBtn');
             const batchAddTagBtn = document.getElementById('batchAddTagBtn');
             const batchRemoveTagBtn = document.getElementById('batchRemoveTagBtn');
             const batchMoveGroupBtn = document.getElementById('batchMoveGroupBtn');
@@ -239,8 +241,10 @@
                 : '';
 
             if (batchRefreshBtn) batchRefreshBtn.style.display = isTempContext ? 'none' : 'inline-flex';
+            if (batchExportBtn) batchExportBtn.style.display = isTempContext ? 'none' : 'inline-flex';
             if (batchEnableForwardingBtn) batchEnableForwardingBtn.style.display = isTempContext ? 'none' : 'inline-flex';
             if (batchDisableForwardingBtn) batchDisableForwardingBtn.style.display = isTempContext ? 'none' : 'inline-flex';
+            if (batchProxyBtn) batchProxyBtn.style.display = isTempContext ? 'none' : 'inline-flex';
             if (batchMoveGroupBtn) batchMoveGroupBtn.style.display = isTempContext ? 'none' : 'inline-flex';
             if (batchAddTagBtn) batchAddTagBtn.style.display = 'inline-flex';
             if (batchRemoveTagBtn) batchRemoveTagBtn.style.display = 'inline-flex';
@@ -280,6 +284,17 @@
                         batchCopyBtn.textContent = isTempContext
                             ? (checked.length > 1 ? `复制邮箱 (${checked.length})` : '复制邮箱')
                             : (checked.length > 1 ? `复制邮箱+别名 (${checked.length})` : '复制邮箱+别名');
+                    }
+                }
+                if (batchExportBtn) {
+                    batchExportBtn.disabled = checked.length === 0;
+                    batchExportBtn.textContent = checked.length > 1 ? `导出 (${checked.length})` : '导出';
+                }
+                if (batchProxyBtn) {
+                    const isUpdatingProxy = batchProxyBtn.dataset.loading === 'true';
+                    batchProxyBtn.disabled = checked.length === 0 || isUpdatingProxy;
+                    if (!isUpdatingProxy) {
+                        batchProxyBtn.textContent = checked.length > 1 ? `代理 (${checked.length})` : '代理';
                     }
                 }
                 if (batchEnableForwardingBtn) {
@@ -327,6 +342,17 @@
                     batchCopyBtn.dataset.loading = 'false';
                     batchCopyBtn.textContent = isTempContext ? '复制邮箱' : '复制邮箱+别名';
                     batchCopyBtn.title = '';
+                }
+                if (batchExportBtn) {
+                    batchExportBtn.disabled = false;
+                    batchExportBtn.textContent = '导出';
+                    batchExportBtn.title = '';
+                }
+                if (batchProxyBtn) {
+                    batchProxyBtn.disabled = false;
+                    batchProxyBtn.dataset.loading = 'false';
+                    batchProxyBtn.textContent = '代理';
+                    batchProxyBtn.title = '';
                 }
                 if (batchEnableForwardingBtn) {
                     batchEnableForwardingBtn.disabled = false;
@@ -418,6 +444,21 @@
                 btn.dataset.loading = 'false';
                 updateBatchActionBar();
             }
+        }
+
+        function exportSelectedAccounts() {
+            if (isTempEmailGroup) {
+                showToast('临时邮箱暂不支持选中导出', 'error');
+                return;
+            }
+
+            const accountIds = getSelectedAccountIds();
+            if (!accountIds.length) {
+                showToast('请先选择要导出的邮箱', 'error');
+                return;
+            }
+
+            startSelectedAccountExport(accountIds);
         }
 
         async function refreshSelectedAccounts() {
@@ -697,6 +738,86 @@
                 }
             } catch (error) {
                 showToast('请求失败', 'error');
+            }
+        }
+
+        // ==================== 批量代理设置 ====================
+
+        function showBatchProxyModal() {
+            if (isTempEmailGroup) {
+                showToast('临时邮箱不支持账号代理设置', 'error');
+                return;
+            }
+            const accountIds = getSelectedAccountIds();
+            if (!accountIds.length) {
+                showToast('请先选择要设置代理的邮箱', 'error');
+                return;
+            }
+            document.getElementById('batchProxyUrl').value = '';
+            document.getElementById('batchFallbackProxyUrl1').value = '';
+            document.getElementById('batchFallbackProxyUrl2').value = '';
+            showModal('batchProxyModal');
+        }
+
+        function hideBatchProxyModal() {
+            hideModal('batchProxyModal');
+        }
+
+        async function confirmBatchProxy() {
+            const btn = document.getElementById('batchProxyBtn');
+            const accountIds = getSelectedAccountIds();
+            if (!accountIds.length) {
+                showToast('请先选择要设置代理的邮箱', 'error');
+                return;
+            }
+
+            const proxyUrl = document.getElementById('batchProxyUrl').value.trim();
+            const fallbackProxyUrl1 = document.getElementById('batchFallbackProxyUrl1').value.trim();
+            const fallbackProxyUrl2 = document.getElementById('batchFallbackProxyUrl2').value.trim();
+            const isClearing = !proxyUrl && !fallbackProxyUrl1 && !fallbackProxyUrl2;
+            const confirmMessage = isClearing
+                ? `确定要清空所选 ${accountIds.length} 个邮箱的账号代理，并改为继承分组代理吗？`
+                : `确定要为所选 ${accountIds.length} 个邮箱设置账号代理吗？`;
+
+            if (!(await showConfirmModal(confirmMessage, { title: '设置账号代理', confirmText: '确认', danger: false }))) {
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.dataset.loading = 'true';
+                btn.textContent = '设置中...';
+            }
+
+            try {
+                const response = await fetch('/api/accounts/batch-update-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        account_ids: accountIds,
+                        proxy_url: proxyUrl,
+                        fallback_proxy_url_1: fallbackProxyUrl1,
+                        fallback_proxy_url_2: fallbackProxyUrl2
+                    })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    handleApiError(data, '批量设置代理失败');
+                    return;
+                }
+
+                showToast(data.message || '账号代理已更新', 'success');
+                hideBatchProxyModal();
+                invalidateAccountCaches();
+                clearAccountSelection();
+                await refreshVisibleAccountList(true);
+            } catch (error) {
+                showToast('批量设置代理失败', 'error');
+            } finally {
+                if (btn) {
+                    btn.dataset.loading = 'false';
+                }
+                updateBatchActionBar();
             }
         }
 

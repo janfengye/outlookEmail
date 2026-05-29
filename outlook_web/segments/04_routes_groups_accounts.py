@@ -488,6 +488,41 @@ def build_group_export_content(group_ids: List[int]) -> Dict[str, Any]:
     }
 
 
+def load_accounts_by_ids_for_export(account_ids: List[int]) -> List[Dict[str, Any]]:
+    normalized_ids = normalize_account_ids(account_ids)
+    if not normalized_ids:
+        return []
+
+    db = get_db()
+    accounts_by_id = {}
+    for chunk_ids in chunk_account_ids(normalized_ids):
+        placeholders = ','.join('?' * len(chunk_ids))
+        rows = db.execute(f'''
+            SELECT a.*, g.name as group_name, g.color as group_color
+            FROM accounts a
+            LEFT JOIN groups g ON a.group_id = g.id
+            WHERE a.id IN ({placeholders})
+        ''', chunk_ids).fetchall()
+        for account in serialize_account_rows(rows, db):
+            accounts_by_id[int(account['id'])] = account
+
+    return [
+        accounts_by_id[account_id]
+        for account_id in normalized_ids
+        if account_id in accounts_by_id
+    ]
+
+
+def build_selected_account_export_content(account_ids: List[int]) -> Dict[str, Any]:
+    accounts = load_accounts_by_ids_for_export(account_ids)
+    lines = [format_account_export_line(account) for account in accounts]
+    return {
+        'content': '\n'.join(lines),
+        'total_count': len(accounts),
+        'account_ids': [int(account['id']) for account in accounts],
+    }
+
+
 def build_all_groups_export_content() -> Dict[str, Any]:
     groups = load_groups()
     return build_group_export_content([group['id'] for group in groups])
@@ -546,9 +581,10 @@ def api_export_all_accounts():
 @app.route('/api/accounts/export-selected', methods=['POST'])
 @login_required
 def api_export_selected_accounts():
-    """导出选中分组的邮箱账号为 TXT 文件（需要二次验证）"""
-    data = request.json
+    """导出选中分组或选中账号为 TXT 文件（需要二次验证）"""
+    data = request.get_json(silent=True) or {}
     group_ids = data.get('group_ids', [])
+    account_ids = data.get('account_ids', [])
     verify_token = data.get('verify_token')
 
     # 检查二次验证token（使用内存存储）
@@ -573,6 +609,31 @@ def api_export_selected_accounts():
     
     # 清除验证token（一次性使用）
     del export_verify_tokens[verify_token]
+
+    if account_ids:
+        export_payload = build_selected_account_export_content(account_ids)
+        total_count = export_payload['total_count']
+
+        if total_count == 0:
+            return jsonify({'success': False, 'error': '选中的账号不存在或没有可导出的邮箱账号'})
+
+        log_audit(
+            'export',
+            'selected_accounts',
+            ','.join(map(str, export_payload['account_ids'])),
+            f"导出选中的 {total_count} 个账号"
+        )
+
+        filename = f"selected_accounts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        encoded_filename = quote(filename)
+
+        return Response(
+            export_payload['content'],
+            mimetype='text/plain; charset=utf-8',
+            headers={
+                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"
+            }
+        )
 
     if not group_ids:
         return jsonify({'success': False, 'error': '请选择要导出的分组'})
@@ -1062,6 +1123,48 @@ def api_batch_update_account_forwarding():
     })
 
 
+@app.route('/api/accounts/batch-update-proxy', methods=['POST'])
+@login_required
+def api_batch_update_account_proxy():
+    """批量更新账号级代理配置"""
+    data = request.json or {}
+    result = update_accounts_proxy_by_ids(
+        data.get('account_ids', []),
+        str(data.get('proxy_url', '') or '').strip(),
+        str(data.get('fallback_proxy_url_1', '') or '').strip(),
+        str(data.get('fallback_proxy_url_2', '') or '').strip(),
+    )
+    if not result.get('success'):
+        return jsonify(result)
+
+    updated_count = result.get('updated_count', 0)
+    unchanged_count = result.get('unchanged_count', 0)
+    is_clearing = not any((
+        str(data.get('proxy_url', '') or '').strip(),
+        str(data.get('fallback_proxy_url_1', '') or '').strip(),
+        str(data.get('fallback_proxy_url_2', '') or '').strip(),
+    ))
+
+    if updated_count:
+        action_label = '清空账号代理，改为继承分组代理' if is_clearing else '设置账号代理'
+        message = f'已为 {updated_count} 个账号{action_label}'
+        if unchanged_count:
+            message += f'，{unchanged_count} 个账号无需更新'
+    elif unchanged_count:
+        message = f'所选 {unchanged_count} 个账号代理配置无需更新'
+    else:
+        message = '没有可更新的账号'
+
+    return jsonify({
+        'success': True,
+        'message': message,
+        'updated_count': updated_count,
+        'updated_accounts': result.get('updated_accounts', []),
+        'unchanged_count': unchanged_count,
+        'missing_ids': result.get('missing_ids', []),
+    })
+
+
 
 @app.route('/api/accounts/search', methods=['GET'])
 @login_required
@@ -1128,6 +1231,10 @@ def api_get_account(account_id):
             'matched_alias': account.get('matched_alias', ''),
             'forward_enabled': bool(account.get('forward_enabled')),
             'forward_last_checked_at': account.get('forward_last_checked_at', ''),
+            'proxy_url': account.get('proxy_url', '') or '',
+            'fallback_proxy_url_1': account.get('fallback_proxy_url_1', '') or '',
+            'fallback_proxy_url_2': account.get('fallback_proxy_url_2', '') or '',
+            'proxy_override_enabled': account_has_proxy_override(account),
             'group_id': account.get('group_id'),
             'group_name': account.get('group_name', '默认分组'),
             'sort_order': normalize_account_sort_order(account.get('sort_order', 0)),
@@ -1200,6 +1307,9 @@ def api_add_account():
     remark = sanitize_input(str(data.get('remark', '') or '').strip(), max_length=500)
     status = normalize_account_status(data.get('status', 'active'))
     tag_ids = normalize_tag_ids_input(data.get('tag_ids', []))
+    proxy_url = str(data.get('proxy_url', '') or '').strip()
+    fallback_proxy_url_1 = str(data.get('fallback_proxy_url_1', '') or '').strip()
+    fallback_proxy_url_2 = str(data.get('fallback_proxy_url_2', '') or '').strip()
     imap_host = (data.get('imap_host', '') or '').strip()
     try:
         imap_port = int(data.get('imap_port', 993) or 993)
@@ -1225,7 +1335,18 @@ def api_add_account():
         else:
             invalid_count += 1
 
-    result = add_accounts_bulk(parsed_accounts, group_id, forward_enabled, sort_order, remark, status, tag_ids)
+    result = add_accounts_bulk(
+        parsed_accounts,
+        group_id,
+        forward_enabled,
+        sort_order,
+        remark,
+        status,
+        tag_ids,
+        proxy_url,
+        fallback_proxy_url_1,
+        fallback_proxy_url_2,
+    )
     added = result.get('added_count', 0)
     skipped_count = result.get('skipped_count', 0)
     tagged_count = result.get('tagged_count', 0)
@@ -1281,6 +1402,14 @@ def api_update_account(account_id):
     remark = sanitize_input(data.get('remark', ''), max_length=200)
     status = data.get('status', 'active')
     forward_enabled = bool(data.get('forward_enabled', False))
+    current_account = get_account_by_id(account_id) or {}
+    proxy_url = str(data.get('proxy_url', current_account.get('proxy_url', '')) or '').strip()
+    fallback_proxy_url_1 = str(
+        data.get('fallback_proxy_url_1', current_account.get('fallback_proxy_url_1', '')) or ''
+    ).strip()
+    fallback_proxy_url_2 = str(
+        data.get('fallback_proxy_url_2', current_account.get('fallback_proxy_url_2', '')) or ''
+    ).strip()
     aliases_provided = 'aliases' in data
     aliases = parse_alias_payload(data.get('aliases', [])) if aliases_provided else []
 
@@ -1317,7 +1446,8 @@ def api_update_account(account_id):
 
     if update_account(
         account_id, email_addr, password, client_id, refresh_token, group_id, sort_order, remark, status,
-        account_type, provider, imap_host, imap_port, imap_password, forward_enabled
+        account_type, provider, imap_host, imap_port, imap_password, forward_enabled,
+        proxy_url, fallback_proxy_url_1, fallback_proxy_url_2
     ):
         cleaned_aliases = get_account_aliases(account_id)
         if aliases_provided:
