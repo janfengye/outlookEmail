@@ -1,4 +1,4 @@
-        /* global closeAllModals, debounce, ensureForwardingSettingsUI, handleGlobalGroupPointerMove, handleGlobalGroupPointerUp, initAccountListScroll, initAccountPageSizeSelect, initAccountSearchScopeSelect, initAccountSelectionGestures, initColorPicker, initEmailListScroll, loadGroups, loadMoreCloudflareGlobalMessages, loadTags, renderEmailList, scheduleEmailListLoadCheck, searchAccounts */
+        /* global applyPendingNewMailSync, closeAllModals, debounce, ensureForwardingSettingsUI, handleGlobalGroupPointerMove, handleGlobalGroupPointerUp, hasPendingNewMailSync, initAccountListScroll, initAccountPageSizeSelect, initAccountSearchScopeSelect, initAccountSelectionGestures, initColorPicker, initEmailListScroll, loadGroups, loadMoreCloudflareGlobalMessages, loadTags, renderEmailList, scheduleEmailListLoadCheck, searchAccounts */
 
         // 全局状态
         let csrfToken = null;
@@ -73,6 +73,7 @@
         let showAccountCreatedAt = true;
         let showAccountSortOrder = false;
         let showGroupId = true;
+        let normalMailLocalRetentionEnabled = false;
 
         function isUntaggedTagFilterValue(value) {
             return String(value || '').trim() === UNTAGGED_TAG_FILTER_KEY;
@@ -165,6 +166,15 @@
 
         function shouldShowGroupId() {
             return showGroupId !== false;
+        }
+
+        function setNormalMailLocalRetentionEnabled(enabled) {
+            normalMailLocalRetentionEnabled = enabled === true;
+            return normalMailLocalRetentionEnabled;
+        }
+
+        function isNormalMailLocalRetentionEnabled() {
+            return normalMailLocalRetentionEnabled === true;
         }
 
         function parseDateInput(dateInput) {
@@ -415,6 +425,40 @@
             cacheKeys.forEach(cacheKey => {
                 delete emailListCache[cacheKey];
             });
+        }
+
+        function isNormalMailRetentionCache(cache) {
+            const method = String(cache?.method || '').trim().toLowerCase();
+            const methodLabel = String(cache?.method_label || '').trim().toLowerCase();
+            return cache?.local_retention === true
+                || method === 'local'
+                || methodLabel === 'local retention';
+        }
+
+        function invalidateNormalMailRetentionCaches(options = {}) {
+            Object.entries(emailListCache).forEach(([cacheKey, cacheValue]) => {
+                if (isNormalMailRetentionCache(cacheValue)) {
+                    delete emailListCache[cacheKey];
+                }
+            });
+
+            if (options.resetCurrentView === true && isNormalMailRetentionCache({
+                method: currentMethod,
+                local_retention: currentMethod === 'local'
+            })) {
+                currentEmails = [];
+                currentSkip = 0;
+                hasMoreEmails = false;
+                renderEmailList(currentEmails);
+                const methodTag = document.getElementById('methodTag');
+                if (methodTag) {
+                    methodTag.style.display = 'none';
+                }
+                const emailCount = document.getElementById('emailCount');
+                if (emailCount) {
+                    emailCount.textContent = '';
+                }
+            }
         }
 
         function canLoadMoreEmails() {
@@ -1068,6 +1112,7 @@
                 setShowAccountCreatedAt(String(data?.settings?.show_account_created_at) !== 'false');
                 setShowAccountSortOrder(String(data?.settings?.show_account_sort_order) === 'true');
                 setShowGroupId(String(data?.settings?.show_group_id) !== 'false');
+                setNormalMailLocalRetentionEnabled(String(data?.settings?.normal_mail_local_retention_enabled) === 'true');
                 return data?.settings || null;
             } catch (error) {
                 return null;
@@ -1127,7 +1172,6 @@
             if (typeof loadTags === 'function') {
                 loadTags();
             }
-            initColorPicker();
             initColorPicker();
             initEmailListScroll();
             initAccountListScroll();
@@ -1311,6 +1355,11 @@
         // 初始化颜色选择器
         function initColorPicker() {
             document.querySelectorAll('.color-option').forEach(option => {
+                if (option.dataset.colorPickerBound === 'true') {
+                    return;
+                }
+
+                option.dataset.colorPickerBound = 'true';
                 option.addEventListener('click', function () {
                     document.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
                     this.classList.add('selected');
@@ -1331,6 +1380,20 @@
         }
 
         // 加载更多邮件
+        function buildLoadMoreEmailsUrl(nextSkip) {
+            const query = new URLSearchParams({
+                method: currentMethod,
+                folder: currentFolder,
+                skip: String(nextSkip),
+                top: '20'
+            });
+            const cache = getEmailListCacheEntry(currentAccount, currentFolder);
+            if (currentMethod === 'local' || cache?.local_retention === true) {
+                query.set('source', 'local');
+            }
+            return `/api/emails/${encodeURIComponent(currentAccount)}?${query.toString()}`;
+        }
+
         async function loadMoreEmails() {
             if (isLoadingMore || !hasMoreEmails) return;
             if (currentMethod === 'cloudflare-admin') {
@@ -1338,6 +1401,12 @@
                     return loadMoreCloudflareGlobalMessages();
                 }
                 return;
+            }
+
+            if (typeof hasPendingNewMailSync === 'function'
+                && typeof applyPendingNewMailSync === 'function'
+                && hasPendingNewMailSync(currentAccount, currentFolder)) {
+                applyPendingNewMailSync();
             }
 
             isLoadingMore = true;
@@ -1362,7 +1431,7 @@
 
             try {
                 const response = await fetchWithTimeout(
-                    `/api/emails/${encodeURIComponent(currentAccount)}?method=${currentMethod}&folder=${currentFolder}&skip=${nextSkip}&top=20`,
+                    buildLoadMoreEmailsUrl(nextSkip),
                     {
                         timeoutMs: EMAIL_LIST_REQUEST_TIMEOUT_MS,
                         timeoutMessage: '加载更多邮件超时，请稍后重试'
@@ -1398,6 +1467,10 @@
                             if (data.method) {
                                 emailListCache[cacheKey].method_label = data.method;
                             }
+                            if (data.local_retention === true) {
+                                emailListCache[cacheKey].local_retention = true;
+                                emailListCache[cacheKey].local_retention_count = Number(data.count) || currentEmails.length;
+                            }
                             if (currentFolder === 'all' && data.folder_summaries) {
                                 emailListCache[cacheKey].folder_summaries = mergeFolderSummaries(
                                     emailListCache[cacheKey].folder_summaries,
@@ -1413,6 +1486,8 @@
                                 method: currentMethod,
                                 method_label: data.method || currentMethod,
                                 derived_from: null,
+                                local_retention: data.local_retention === true,
+                                local_retention_count: Number(data.count) || currentEmails.length,
                                 folder_summaries: currentFolder === 'all'
                                     ? normalizeFolderSummaries(data.folder_summaries)
                                     : undefined
