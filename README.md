@@ -28,7 +28,24 @@ admin123
 - Windows 数据默认保存在 `%APPDATA%\OutlookEmail`
 - 默认登录密码仍然是 `admin123`，首次登录后建议立即修改
 
-### 方式二：使用 Docker（推荐服务器部署）
+### 方式二：下载 macOS 安装包
+
+从 GitHub Releases 下载对应架构的 `OutlookEmail-macos-*-*.dmg`，打开后把 `OutlookEmail.app` 拖到 `Applications` 即可。
+
+桌面版首次启动会自动：
+
+- 生成并持久化 `SECRET_KEY`
+- 创建本地数据目录和 SQLite 数据库
+- 启动 Web 服务，默认地址 `http://127.0.0.1:5000`
+
+说明：
+
+- macOS 数据默认保存在 `~/Library/Application Support/OutlookEmail`
+- 如果 macOS 提示Apple无法验证“OutlookEmail”是否包含可能危害Mac安全或泄漏隐私的恶意软件。可执行下面命令然后重试
+  `sudo xattr -rd com.apple.quarantine /Applications/OutlookEmail.app` 
+- 默认登录密码仍然是 `admin123`，首次登录后建议立即修改
+
+### 方式三：使用 Docker（推荐服务器部署）
 
 ```bash
 # 拉取最新镜像
@@ -44,7 +61,7 @@ docker run -d \
   ghcr.io/assast/outlookemail:latest
 ```
 
-### 方式三：使用 Python 直接运行
+### 方式四：使用 Python 直接运行
 
 ```bash
 git clone https://github.com/assast/outlookEmail.git
