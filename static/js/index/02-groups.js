@@ -501,7 +501,7 @@
                 syncAccountPageSizeSelect();
                 updateTagFilter();
                 if (searchInput) {
-                    searchInput.placeholder = '邮箱、别名、备注或标签';
+                    searchInput.placeholder = '邮箱|别名|备注|标签';
                 }
             }
         }
