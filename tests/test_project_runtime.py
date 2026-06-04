@@ -133,6 +133,163 @@ class ProjectRuntimeTests(unittest.TestCase):
         self.assertTrue(payload['success'])
         return payload['data']['accounts']
 
+    def test_account_detail_hides_saved_password_fields(self):
+        account_id = self._insert_account('hidden-secret@example.com')
+        with self.app.app_context():
+            db = web_outlook_app.get_db()
+            db.execute(
+                '''
+                UPDATE accounts
+                SET password = ?, imap_password = ?
+                WHERE id = ?
+                ''',
+                ('saved-password', 'saved-imap-password', account_id)
+            )
+            db.commit()
+
+        response = self.client.get(f'/api/accounts/{account_id}')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        account = payload['account']
+        self.assertNotIn('password', account)
+        self.assertNotIn('imap_password', account)
+        self.assertTrue(account['has_password'])
+        self.assertTrue(account['has_imap_password'])
+
+    def test_account_secrets_require_login_password(self):
+        account_id = self._insert_account('secret-verify@example.com')
+        with self.app.app_context():
+            db = web_outlook_app.get_db()
+            db.execute(
+                '''
+                UPDATE accounts
+                SET password = ?, imap_password = ?
+                WHERE id = ?
+                ''',
+                ('account-password', 'imap-password', account_id)
+            )
+            web_outlook_app.set_setting('login_password', web_outlook_app.hash_password('secret-pass'))
+            db.commit()
+
+        wrong_response = self.client.post(
+            f'/api/accounts/{account_id}/secrets',
+            json={'password': 'wrong-pass'}
+        )
+        self.assertEqual(wrong_response.status_code, 200)
+        wrong_payload = wrong_response.get_json()
+        self.assertFalse(wrong_payload['success'])
+        self.assertNotIn('secrets', wrong_payload)
+
+        response = self.client.post(
+            f'/api/accounts/{account_id}/secrets',
+            json={'password': 'secret-pass'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['secrets']['password'], 'account-password')
+        self.assertEqual(payload['secrets']['imap_password'], 'imap-password')
+
+    def test_account_secrets_can_reveal_single_requested_field(self):
+        account_id = self._insert_account('single-secret@example.com')
+        with self.app.app_context():
+            db = web_outlook_app.get_db()
+            db.execute(
+                '''
+                UPDATE accounts
+                SET password = ?, imap_password = ?
+                WHERE id = ?
+                ''',
+                ('account-password', 'imap-password', account_id)
+            )
+            web_outlook_app.set_setting('login_password', web_outlook_app.hash_password('secret-pass'))
+            db.commit()
+
+        response = self.client.post(
+            f'/api/accounts/{account_id}/secrets',
+            json={'password': 'secret-pass', 'field': 'password'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['secrets'], {'password': 'account-password'})
+
+        invalid_response = self.client.post(
+            f'/api/accounts/{account_id}/secrets',
+            json={'password': 'secret-pass', 'field': 'refresh_token'}
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+        invalid_payload = invalid_response.get_json()
+        self.assertFalse(invalid_payload['success'])
+        self.assertNotIn('secrets', invalid_payload)
+
+    def test_update_account_preserves_password_when_field_is_omitted(self):
+        account_id = self._insert_account('preserve-password@example.com')
+        with self.app.app_context():
+            db = web_outlook_app.get_db()
+            db.execute(
+                '''
+                UPDATE accounts
+                SET password = ?, client_id = ?, refresh_token = ?
+                WHERE id = ?
+                ''',
+                ('old-password', 'old-client', 'old-refresh', account_id)
+            )
+            db.commit()
+
+        response = self.client.put(f'/api/accounts/{account_id}', json={
+            'email': 'preserve-password@example.com',
+            'client_id': 'new-client',
+            'refresh_token': 'new-refresh',
+            'account_type': 'outlook',
+            'provider': 'outlook',
+            'group_id': 1,
+            'remark': 'updated without password',
+            'status': 'active',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['success'])
+
+        with self.app.app_context():
+            account = web_outlook_app.get_account_by_id(account_id)
+        self.assertEqual(account['password'], 'old-password')
+        self.assertEqual(account['client_id'], 'new-client')
+        self.assertEqual(account['remark'], 'updated without password')
+
+    def test_update_imap_account_preserves_imap_password_when_field_is_omitted(self):
+        account_id = self._insert_account('preserve-imap@example.com')
+        with self.app.app_context():
+            db = web_outlook_app.get_db()
+            db.execute(
+                '''
+                UPDATE accounts
+                SET account_type = ?, provider = ?, client_id = ?, refresh_token = ?,
+                    imap_host = ?, imap_port = ?, imap_password = ?
+                WHERE id = ?
+                ''',
+                ('imap', 'gmail', '', '', 'imap.gmail.com', 993, 'old-imap-password', account_id)
+            )
+            db.commit()
+
+        response = self.client.put(f'/api/accounts/{account_id}', json={
+            'email': 'preserve-imap@example.com',
+            'account_type': 'imap',
+            'provider': 'gmail',
+            'imap_host': '',
+            'imap_port': 993,
+            'group_id': 1,
+            'remark': 'updated without imap password',
+            'status': 'active',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['success'])
+
+        with self.app.app_context():
+            account = web_outlook_app.get_account_by_id(account_id)
+        self.assertEqual(account['imap_password'], 'old-imap-password')
+        self.assertEqual(account['remark'], 'updated without imap password')
+
     def test_accounts_api_imports_and_pages_ten_thousand_accounts(self):
         account_lines = [
             f'bulk{i:05d}@example.com----imap-password-{i}'
@@ -296,8 +453,24 @@ class ProjectRuntimeTests(unittest.TestCase):
             return_value={
                 'release_version': 'v2.0.24',
                 'release_url': 'https://example.com/releases/v2.0.24',
+                'release_title': 'v2.0.24',
+                'release_body': '- 新增版本提示弹框\n- 修复更新状态显示',
                 'repository_version': 'v2.0.24',
                 'errors': [],
+            },
+        ), patch.object(
+            web_outlook_app,
+            'fetch_changelog_release_notes',
+            return_value={
+                'source': 'changelog',
+                'title': 'v2.0.24',
+                'items': ['新增版本提示弹框'],
+                'entries': [
+                    {'title': 'v2.0.24', 'items': ['新增版本提示弹框'], 'url': 'https://example.com/changelog'},
+                    {'title': 'v2.0.23', 'items': ['优化版本检查'], 'url': 'https://example.com/changelog'},
+                    {'title': 'v2.0.22', 'items': ['修复更新入口'], 'url': 'https://example.com/changelog'},
+                ],
+                'url': 'https://example.com/changelog',
             },
         ), patch.object(web_outlook_app, 'APP_VERSION', '2.0.23'):
             with self.app.app_context():
@@ -314,6 +487,53 @@ class ProjectRuntimeTests(unittest.TestCase):
         self.assertEqual(version_status['badge_label'], '可更新')
         self.assertEqual(version_status['latest_version'], 'v2.0.24')
         self.assertIn('v2.0.24', version_status['hint'])
+        self.assertEqual(version_status['release_notes']['source'], 'changelog')
+        self.assertEqual(version_status['release_notes']['title'], 'v2.0.24')
+        self.assertIn('新增版本提示弹框', version_status['release_notes']['items'])
+        self.assertEqual(len(version_status['release_notes']['entries']), 3)
+        self.assertEqual(version_status['release_notes']['entries'][1]['title'], 'v2.0.23')
+
+    def test_version_status_falls_back_to_changelog_release_notes(self):
+        class FakeResponse:
+            text = (
+                '## [2.0.24] - 2026-06-04\n\n- 新增远端更新说明\n- 优化版本弹框\n\n'
+                '## [2.0.23] - 2026-06-03\n\n- 修复版本检查\n\n'
+                '## [2.0.22] - 2026-06-02\n\n- 优化下载入口\n\n'
+                '## [2.0.21] - 2026-06-01\n\n- 不应展示这一条\n'
+            )
+
+            def raise_for_status(self):
+                return None
+
+        with patch.object(
+            web_outlook_app,
+            'fetch_remote_version_snapshot',
+            return_value={
+                'release_version': 'v2.0.24',
+                'release_url': 'https://example.com/releases/v2.0.24',
+                'release_title': 'v2.0.24',
+                'release_body': '',
+                'repository_version': 'v2.0.24',
+                'errors': [],
+            },
+        ), patch.object(web_outlook_app.requests, 'get', return_value=FakeResponse()), patch.object(
+            web_outlook_app,
+            'APP_VERSION',
+            '2.0.23',
+        ):
+            with self.app.app_context():
+                web_outlook_app.VERSION_CHECK_CACHE['payload'] = None
+                web_outlook_app.VERSION_CHECK_CACHE['expires_at'] = 0.0
+
+            response = self.client.get('/api/version-status?refresh=1')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        release_notes = payload['version_status']['release_notes']
+        self.assertEqual(release_notes['source'], 'changelog')
+        self.assertEqual(release_notes['title'], 'v2.0.24')
+        self.assertEqual(release_notes['items'], ['新增远端更新说明', '优化版本弹框'])
+        self.assertEqual([entry['title'] for entry in release_notes['entries']], ['v2.0.24', 'v2.0.23', 'v2.0.22'])
 
     def test_version_status_reports_up_to_date_when_release_matches(self):
         with patch.object(
@@ -1995,6 +2215,7 @@ class FrontendTimezoneBootstrapTests(unittest.TestCase):
 
     def test_version_chip_shows_upgrade_badge_markup_and_logic(self):
         layout_html = pathlib.Path(ROOT_DIR, 'templates', 'partials', 'index', 'layout.html').read_text(encoding='utf-8')
+        settings_html = pathlib.Path(ROOT_DIR, 'templates', 'partials', 'index', 'dialogs-management.html').read_text(encoding='utf-8')
         core_js = pathlib.Path(ROOT_DIR, 'static', 'js', 'index', '01-core.js').read_text(encoding='utf-8')
         navbar_css = pathlib.Path(ROOT_DIR, 'static', 'css', 'index', '02-navbar.css').read_text(encoding='utf-8')
 
@@ -2006,6 +2227,20 @@ class FrontendTimezoneBootstrapTests(unittest.TestCase):
         self.assertIn("const shouldShowUpgradeBadge = state === 'update_available';", core_js)
         self.assertIn('upgradeBadgeEl.hidden = !shouldShowUpgradeBadge;', core_js)
         self.assertIn('loadVersionStatus();', core_js)
+        self.assertIn('showUpdateNoticeIfNeeded(payload.version_status);', core_js)
+        self.assertNotIn('window.setTimeout(showReleaseNoticeIfNeeded, 900);', core_js)
+        self.assertIn('id="releaseNoticeDockerUpdateBtn"', settings_html)
+        self.assertIn('Docker 在线更新', settings_html)
+        self.assertIn('前往下载', settings_html)
+        self.assertIn('仅 Docker 版本支持在线更新', settings_html)
+        self.assertIn('README 中的「启用界面 Docker 在线更新」', settings_html)
+        self.assertIn("document.getElementById('releaseNoticeDockerUpdateBtn')", core_js)
+        self.assertIn('releaseNotes.entries', core_js)
+        self.assertIn('releaseNotes.entries.slice(0, 3)', core_js)
+        self.assertIn('updateButton.hidden = !(enabled && updateAvailable);', core_js)
+        self.assertIn('updateButton.disabled = !available || running;', core_js)
+        self.assertIn("const dockerHint = document.getElementById('releaseNoticeDockerHint');", core_js)
+        self.assertIn('dockerHint.hidden = !updateAvailable || available;', core_js)
         self.assertIn('.app-version-chip__upgrade-badge {', navbar_css)
         self.assertIn('background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);', navbar_css)
         self.assertIn('color: #92400e;', navbar_css)

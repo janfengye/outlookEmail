@@ -942,58 +942,46 @@
         </div>
     </div>
 
-    <!-- 版本更新提示模态框 -->
-    <div class="modal" id="releaseNoticeModal" data-release-version="{{ app_version }}"
+    <!-- 新版本提示模态框 -->
+    <div class="modal" id="releaseNoticeModal"
         onmousedown="if(event.target === this) dismissReleaseNotice()">
         <div class="modal-content release-notice-modal-content">
             <div class="modal-header">
                 <div>
                     <div class="release-notice-eyebrow">版本更新</div>
-                    <h3>新版功能已上线</h3>
+                    <h3>发现新版本</h3>
                 </div>
                 <button class="modal-close" onclick="dismissReleaseNotice()">&times;</button>
             </div>
             <div class="modal-body release-notice-body">
-                <div class="release-notice-version">当前版本：v{{ app_version }}</div>
-                <div class="release-notice-list">
-                    <div class="release-notice-card release-notice-entry">
+                <div class="release-notice-version" id="releaseNoticeVersionSummary">当前版本：v{{ app_version }}</div>
+                <div class="release-notice-list" id="releaseNoticeNotesList">
+                    <div class="release-notice-card release-notice-entry" id="releaseNoticeNotesCard">
                         <div class="release-notice-entry-header">
-                            <div class="release-notice-card-title">v2.0.60</div>
+                            <div class="release-notice-card-title" id="releaseNoticeNotesTitle">更新内容</div>
                             <span class="release-notice-badge">最新</span>
                         </div>
                         <ul>
-                            <li>修复 macOS 安装包打开后缺少可用退出入口的问题。</li>
-                            <li>应用现在可通过 macOS 状态栏菜单退出，并同步停止后台服务。</li>
-                        </ul>
-                    </div>
-                    <div class="release-notice-card release-notice-entry">
-                        <div class="release-notice-entry-header">
-                            <div class="release-notice-card-title">v2.0.59</div>
-                        </div>
-                        <ul>
-                            <li>搜索框保留多行输入能力，默认展示高度收敛为一行，日常浏览更紧凑。</li>
-                            <li>新增 macOS DMG 安装包发布产物，支持 Apple Silicon 和 Intel Mac。</li>
-                            <li>发布流程会校验 macOS 安装包架构，降低下载到错误架构产物的风险。</li>
-                        </ul>
-                    </div>
-                    <div class="release-notice-card release-notice-entry">
-                        <div class="release-notice-entry-header">
-                            <div class="release-notice-card-title">v2.0.58</div>
-                        </div>
-                        <ul>
-                            <li>账号搜索支持多个关键词，空格或换行分隔后任一命中即可返回结果。</li>
-                            <li>多个关键词可同时匹配主邮箱、别名邮箱、备注和标签，最多支持 200 个。</li>
-                            <li>搜索框改为多行输入，批量粘贴邮箱或关键词更方便。</li>
+                            <li>暂时无法获取更新内容，可查看完整更新日志。</li>
                         </ul>
                     </div>
                 </div>
-                <div class="release-notice-hint">
-                    此提示每个版本只会显示一次。后续发布时，可在这里维护新版功能说明。
+                <div class="release-notice-hint" id="releaseNoticeHint">
+                    此提示每个新版本只会显示一次。
+                </div>
+                <div class="release-notice-hint" id="releaseNoticeDockerHint" hidden>
+                    仅 Docker 版本支持在线更新，请参考
+                    <a href="https://github.com/assast/outlookEmail#readme" target="_blank" rel="noreferrer">README 中的「启用界面 Docker 在线更新」</a>
+                    进行设置。
                 </div>
             </div>
             <div class="modal-footer">
-                <a class="btn btn-secondary" href="{{ changelog_url }}" target="_blank" rel="noreferrer">查看更新日志</a>
-                <button class="btn btn-primary" type="button" onclick="dismissReleaseNotice()">我知道了</button>
+                <a class="btn btn-secondary" id="releaseNoticeChangelogLink" href="{{ changelog_url }}" target="_blank" rel="noreferrer">查看更新日志</a>
+                <a class="btn btn-primary" id="releaseNoticeUpdateLink" href="{{ changelog_url }}" target="_blank" rel="noreferrer" onclick="markCurrentReleaseNoticeSeen()">前往下载</a>
+                <button class="btn btn-primary" id="releaseNoticeDockerUpdateBtn" type="button"
+                    data-default-label="Docker 在线更新" data-unavailable-label="不可在线更新"
+                    onclick="startDockerUpdate()" hidden>Docker 在线更新</button>
+                <button class="btn btn-secondary" type="button" onclick="dismissReleaseNotice()">我知道了</button>
             </div>
         </div>
     </div>
