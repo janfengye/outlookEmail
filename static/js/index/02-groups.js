@@ -1,4 +1,4 @@
-        /* global ACCOUNT_LIST_DEFAULT_PAGE_SIZE, ACCOUNT_LIST_MAX_PAGE_SIZE, accountListPageSize, accountListRequestSeq, accountPaginationState, accountSelectionMode, accountsCache, closeAllModals, currentAccount, currentAccountListSource, currentEmailDetail, currentEmailId, currentEmails, currentGroupId, currentSkip, currentSortBy, currentSortOrder, deleteAccount, editingGroupId, escapeHtml, formatAbsoluteDateTime, generateTempEmail, groups, handleAccountRowSelectionClick, handleAccountSelectionCheckboxClick, handleApiError, hasMoreEmails, hideModal, isMobileLayout, isTempEmailGroup, loadTempEmails, localStorage, matchesSelectedTagFilters, normalizeTagFilterSelectionValue, openMobilePanel, renderEmptyStateMarkup, renderTempEmailList, resetSelectedAccountView, selectedColor, selectedTagFilters, setModalVisible, shouldShowAccountCreatedAt, shouldShowAccountSortOrder, showAddAccountModal, showGetRefreshTokenModal, showModal, showRefreshError, showTagManagementModal, showToast, suppressGroupClickUntil, tempEmailGroupId, toggleAccountSelectionMode, updateCurrentGroupHeader, updateMobileContext */
+        /* global ACCOUNT_LIST_DEFAULT_PAGE_SIZE, ACCOUNT_LIST_MAX_PAGE_SIZE, accountListPageSize, accountListRequestSeq, accountPaginationState, accountSelectionMode, accountsCache, closeAllModals, currentAccount, currentAccountListSource, currentEmailDetail, currentEmailId, currentEmails, currentGroupId, currentSkip, currentSortBy, currentSortOrder, deleteAccount, editingGroupId, escapeHtml, formatAbsoluteDateTime, generateTempEmail, groups, handleAccountRowSelectionClick, handleAccountSelectionCheckboxClick, handleApiError, hasMoreEmails, hideModal, isMobileLayout, isTempEmailGroup, loadCloudflareChannelsForImport, loadTempEmails, localStorage, matchesSelectedTagFilters, normalizeTagFilterSelectionValue, openMobilePanel, renderEmptyStateMarkup, renderTempEmailList, resetSelectedAccountView, selectedColor, selectedTagFilters, setModalVisible, shouldShowAccountCreatedAt, shouldShowAccountSortOrder, showAddAccountModal, showGetRefreshTokenModal, showModal, showRefreshError, showTagManagementModal, showToast, suppressGroupClickUntil, tempEmailGroupId, toggleAccountSelectionMode, updateCurrentGroupHeader, updateMobileContext */
 
         // ==================== 分组相关 ====================
 
@@ -828,7 +828,25 @@
             return `
                 <button class="panel-action-btn account-selection-mode-btn${activeClass}" id="accountSelectionModeBtn"
                         onclick="toggleAccountSelectionMode()" title="${title}" aria-pressed="${accountSelectionMode ? 'true' : 'false'}">
-                    ☑
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="2" width="12" height="12" rx="2"></rect>
+                        <path d="M5 8l2 2 4-4"></path>
+                    </svg>
+                </button>
+            `;
+        }
+
+        function renderAccountMinimalModeButton() {
+            const isMinimal = localStorage.getItem('outlook_account_list_minimal') === 'true';
+            const activeClass = isMinimal ? ' active' : '';
+            const title = isMinimal ? '切换详细展示' : '切换极简展示';
+            return `
+                <button class="panel-action-btn${activeClass}" id="accountMinimalBtn" onclick="toggleAccountMinimalMode()" title="${title}" aria-pressed="${isMinimal ? 'true' : 'false'}">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="2.5" width="12" height="2.5" rx="0.5"></rect>
+                        <rect x="2" y="6.75" width="12" height="2.5" rx="0.5"></rect>
+                        <rect x="2" y="11" width="12" height="2.5" rx="0.5"></rect>
+                    </svg>
                 </button>
             `;
         }
@@ -841,10 +859,16 @@
                 actions.innerHTML = `
                     ${renderAccountSelectionModeButton()}
                     <button class="panel-action-btn" onclick="showTagManagementModal()" title="管理标签">
-                        🏷️
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7 1.5h6v6L6.5 14 2 9.5 7 1.5z"></path>
+                            <circle cx="9.5" cy="5" r="1.2" fill="currentColor"></circle>
+                        </svg>
                     </button>
+                    ${renderAccountMinimalModeButton()}
                     <button class="panel-action-btn panel-action-btn-accent" onclick="generateTempEmail()" title="生成临时邮箱">
-                        ⚡
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="9 1 2 9 8 9 7 15 14 7 8 7 9 1"></polygon>
+                        </svg>
                     </button>
                     <button class="panel-action-btn panel-action-btn-primary" onclick="showAddAccountModal()" title="导入邮箱账号">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -871,10 +895,17 @@
                 actions.innerHTML = `
                     ${renderAccountSelectionModeButton()}
                     <button class="panel-action-btn" onclick="showTagManagementModal()" title="管理标签">
-                        🏷️
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7 1.5h6v6L6.5 14 2 9.5 7 1.5z"></path>
+                            <circle cx="9.5" cy="5" r="1.2" fill="currentColor"></circle>
+                        </svg>
                     </button>
+                    ${renderAccountMinimalModeButton()}
                     <button class="panel-action-btn panel-action-btn-accent" onclick="showGetRefreshTokenModal()" title="授权并保存 Outlook 账号">
-                        🔑
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="5.5" cy="10.5" r="3.5"></circle>
+                            <path d="M8 8l5-5M13 3h2v2M11 5h2v2"></path>
+                        </svg>
                     </button>
                     <button class="panel-action-btn panel-action-btn-primary" onclick="showAddAccountModal()" title="导入邮箱账号">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -1977,9 +2008,13 @@
             const inputEl = document.getElementById('accountInput');
             const channelGroup = document.getElementById('importChannelGroup');
             const channelSelect = document.getElementById('importChannelSelect');
+            const cloudflareChannelGroup = document.getElementById('importCloudflareChannelGroup');
+            const cloudflareModeGroup = document.getElementById('importCloudflareModeGroup');
+            const cloudflareModeSelect = document.getElementById('importCloudflareImportMode');
             const providerGroup = document.getElementById('importProviderGroup');
             const providerSelect = document.getElementById('importProviderSelect');
             const exampleEl = document.getElementById('importFormatExample');
+            const importSource = document.querySelector('#addAccountModal .import-account-source');
             const customImapSettings = document.getElementById('customImapSettings');
             const customHost = document.getElementById('importImapHost');
             const customPort = document.getElementById('importImapPort');
@@ -1989,6 +2024,11 @@
             const isTempGroup = isTempImportGroup();
             if (channelGroup) channelGroup.style.display = isTempGroup ? '' : 'none';
             if (providerGroup) providerGroup.style.display = isTempGroup ? 'none' : '';
+            if (!isTempGroup) {
+                if (cloudflareChannelGroup) cloudflareChannelGroup.style.display = 'none';
+                if (cloudflareModeGroup) cloudflareModeGroup.style.display = 'none';
+                if (importSource) importSource.style.display = '';
+            }
             accountDefaultFields.forEach(field => {
                 const isTagField = !!field.querySelector('#importTagDropdown');
                 field.style.display = isTempGroup ? (isTagField ? '' : 'none') : '';
@@ -1997,6 +2037,14 @@
             if (isTempGroup) {
                 if (customImapSettings) customImapSettings.style.display = 'none';
                 const channel = channelSelect ? channelSelect.value : 'gptmail';
+                const isCloudflare = channel === 'cloudflare';
+                const cloudflareMode = cloudflareModeSelect ? cloudflareModeSelect.value : 'auto';
+                if (cloudflareChannelGroup) cloudflareChannelGroup.style.display = isCloudflare ? '' : 'none';
+                if (cloudflareModeGroup) cloudflareModeGroup.style.display = isCloudflare ? '' : 'none';
+                if (importSource) importSource.style.display = isCloudflare && cloudflareMode === 'auto' ? 'none' : '';
+                if (isCloudflare && typeof loadCloudflareChannelsForImport === 'function') {
+                    loadCloudflareChannelsForImport();
+                }
                 if (channel === 'duckmail') {
                     hintEl.textContent = '格式：邮箱----密码，每行一个。';
                     inputEl.placeholder = '邮箱----密码';
@@ -2007,11 +2055,20 @@
                     return;
                 }
                 if (channel === 'cloudflare') {
-                    hintEl.textContent = '格式：邮箱----JWT。可用 [cloudflare:渠道名] 分段，或使用 邮箱----JWT----渠道名。';
-                    inputEl.placeholder = '[cloudflare:cfmail-us]\nuser@example.com----jwt\nuser2@example.com----jwt----cfmail-hk';
+                    if (cloudflareMode === 'auto') {
+                        hintEl.textContent = '自动从所选 Cloudflare 渠道拉取邮箱地址并导入，不拉取 JWT。';
+                        inputEl.placeholder = '';
+                        if (exampleEl) {
+                            exampleEl.style.display = 'none';
+                            exampleEl.textContent = '';
+                        }
+                        return;
+                    }
+                    hintEl.textContent = '格式：每行一个邮箱地址。手动导入不再支持 邮箱----JWT。';
+                    inputEl.placeholder = 'user@example.com\nuser2@example.com';
                     if (exampleEl) {
                         exampleEl.style.display = '';
-                        exampleEl.textContent = '示例：\n[cloudflare:cfmail-us]\nuser@example.com----eyJhbGciOi...\nuser2@example.com----eyJhbGciOi...----cfmail-hk';
+                        exampleEl.textContent = '示例：\nuser@example.com\nuser2@example.com';
                     }
                     return;
                 }
