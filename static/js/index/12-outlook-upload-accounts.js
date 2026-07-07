@@ -19,11 +19,73 @@
                 : '<span class="upload-accounts-badge upload-accounts-badge--no">未授权</span>';
         }
 
+        function formatUploadAccountTags(tags) {
+            const safeTags = Array.isArray(tags) ? tags : [];
+            if (!safeTags.length) {
+                return '-';
+            }
+
+            const visibleTags = safeTags.slice(0, 2);
+            const hiddenCount = Math.max(0, safeTags.length - visibleTags.length);
+            const title = safeTags
+                .map(tag => tag && tag.name ? String(tag.name) : '')
+                .filter(Boolean)
+                .join('、');
+            const tagHtml = visibleTags.map(tag => {
+                const tagName = tag && tag.name ? String(tag.name) : '';
+                const tagColor = tag && tag.color ? String(tag.color) : '#64748b';
+                return `
+                    <span class="account-status-pill tag upload-accounts-tag-pill"
+                        style="--pill-accent: ${escapeHtml(tagColor)}"
+                        title="${escapeHtml(tagName)}">${escapeHtml(tagName)}</span>
+                `;
+            }).join('');
+            const moreHtml = hiddenCount > 0
+                ? `<span class="account-status-pill outline">+${hiddenCount}</span>`
+                : '';
+
+            return `<div class="upload-accounts-tags" title="${escapeHtml(title)}">${tagHtml}${moreHtml}</div>`;
+        }
+
+        function getUploadAccountPasswordMask(length) {
+            return '*'.repeat(Math.max(6, Number(length) || 0));
+        }
+
+        function getUploadAccountEyeIcon(hidden) {
+            if (!hidden) {
+                return `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 3l18 18"></path>
+                        <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path>
+                        <path d="M9.5 5.5A10.5 10.5 0 0 1 12 5c6 0 9.5 7 9.5 7a17.6 17.6 0 0 1-2.1 3"></path>
+                        <path d="M6.5 6.5C3.8 8.3 2.5 12 2.5 12s3.5 7 9.5 7a10 10 0 0 0 4.5-1.1"></path>
+                    </svg>
+                `;
+            }
+            return `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            `;
+        }
+
         function formatUploadAccountPassword(item) {
             if (!item || !item.has_password) {
                 return '-';
             }
-            return '已保存';
+            const plainPassword = typeof item.password === 'string' ? item.password : '';
+            const maskedPassword = getUploadAccountPasswordMask(item.password_length || plainPassword.length);
+            return `
+                <span class="upload-accounts-password" data-password-visible="false">
+                    <span class="upload-accounts-password-text upload-accounts-password-mask">${escapeHtml(maskedPassword)}</span>
+                    <button class="upload-accounts-password-toggle" type="button"
+                        data-upload-account-password="${escapeHtml(plainPassword)}"
+                        aria-label="显示密码" title="显示密码">
+                        ${getUploadAccountEyeIcon(true)}
+                    </button>
+                </span>
+            `;
         }
 
         function renderUploadAccountsRows(items) {
@@ -46,18 +108,18 @@
                     // 编辑状态
                     return `
                         <tr class="upload-accounts-row--editing" data-editing-id="${escapeHtml(String(itemId))}">
-                            <td>${escapeHtml(String(itemId))}</td>
-                            <td class="upload-accounts-cell-mono">
+                            <td class="upload-accounts-cell-mono upload-accounts-cell-right">
                                 <input type="text" class="upload-accounts-edit-input"
                                     id="edit-email-${escapeHtml(String(itemId))}"
                                     value="${escapeHtml(itemEmail)}"
                                     placeholder="邮箱" autocomplete="off">
                             </td>
-                            <td>
+                            <td class="upload-accounts-cell-right">
                                 <input type="password" class="upload-accounts-edit-input"
                                     id="edit-password-${escapeHtml(String(itemId))}"
                                     placeholder="留空不改" autocomplete="off">
                             </td>
+                            <td class="upload-accounts-edit-disabled">-</td>
                             <td class="upload-accounts-edit-disabled">-</td>
                             <td>
                                 <input type="text" class="upload-accounts-edit-input"
@@ -74,17 +136,17 @@
                     `;
                 } else {
                     // 正常显示状态
-                    const authBtnLabel = item.is_authorized ? '重新授权' : '去授权';
+                    const authBtnLabel = item.is_authorized ? '重新授权' : '授权';
                     const editDisabled = uploadAccountsState.editingRowId !== null;
                     const authBtn = `<button class="btn btn-sm btn-primary" type="button" style="width: 80px;" ${editDisabled ? 'disabled' : ''} data-graph-auth-account-id="${escapeHtml(String(itemId))}" data-graph-auth-email="${escapeHtml(itemEmail)}" data-graph-auth-password-length="${escapeHtml(String(item.password_length || 0))}">${authBtnLabel}</button>`;
                     const editBtn = `<button class="btn btn-sm btn-secondary" type="button" ${editDisabled ? 'disabled' : ''} onclick="enterRowEditMode(${escapeHtml(String(itemId))}, '${escapeHtml(itemEmail)}', '${escapeHtml(itemRemark)}')">修改</button>`;
                     const deleteBtn = `<button class="btn btn-sm btn-danger" type="button" ${editDisabled ? 'disabled' : ''} data-delete-account-id="${escapeHtml(String(itemId))}" data-delete-account-email="${escapeHtml(itemEmail)}">删除</button>`;
                     return `
                         <tr>
-                            <td>${escapeHtml(String(itemId))}</td>
-                            <td class="upload-accounts-cell-mono">${escapeHtml(itemEmail)}</td>
-                            <td class="upload-accounts-cell-mono">${escapeHtml(formatUploadAccountPassword(item))}</td>
+                            <td class="upload-accounts-cell-mono upload-accounts-cell-right">${escapeHtml(itemEmail)}</td>
+                            <td class="upload-accounts-cell-mono upload-accounts-cell-right">${formatUploadAccountPassword(item)}</td>
                             <td>${formatUploadAccountAuthorized(item.is_authorized)}</td>
+                            <td>${formatUploadAccountTags(item.tags)}</td>
                             <td>${escapeHtml(itemRemark)}</td>
                             <td>${escapeHtml(itemCreatedAt)}</td>
                             <td>${authBtn}${editBtn}${deleteBtn}</td>
@@ -114,10 +176,33 @@
             }
         }
 
+        function toggleUploadAccountPasswordVisibility(button) {
+            const wrapper = button.closest('.upload-accounts-password');
+            const textEl = wrapper ? wrapper.querySelector('.upload-accounts-password-text') : null;
+            if (!wrapper || !textEl) return;
+
+            const isVisible = wrapper.dataset.passwordVisible === 'true';
+            const plainPassword = button.dataset.uploadAccountPassword || '';
+            const maskedPassword = getUploadAccountPasswordMask(plainPassword.length);
+
+            wrapper.dataset.passwordVisible = isVisible ? 'false' : 'true';
+            textEl.textContent = isVisible ? maskedPassword : plainPassword;
+            textEl.classList.toggle('upload-accounts-password-mask', isVisible);
+            button.setAttribute('aria-label', isVisible ? '显示密码' : '隐藏密码');
+            button.setAttribute('title', isVisible ? '显示密码' : '隐藏密码');
+            button.innerHTML = getUploadAccountEyeIcon(isVisible);
+        }
+
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-upload-account-password]');
+            if (!button) return;
+            toggleUploadAccountPasswordVisibility(button);
+        });
+
         async function loadUploadAccounts() {
             const tbody = document.getElementById('uploadAccountsTableBody');
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" class="upload-accounts-empty">正在加载...</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="upload-accounts-empty">正在加载...</td></tr>';
             }
             uploadAccountsState.loading = true;
             syncUploadAccountsPagination();
@@ -321,7 +406,7 @@
 
         // ==================== Outlook IMAP OAuth 授权 ====================
 
-        const GRAPH_AUTH_LOG_PLACEHOLDER = '点击账号「去授权 / 重新授权」后，授权日志会显示在这里。';
+        const GRAPH_AUTH_LOG_PLACEHOLDER = '点击账号「授权 / 重新授权」后，授权日志会显示在这里。';
         const GRAPH_AUTH_MODE_LABELS = {
             imap: 'Outlook IMAP',
             graph: 'Graph-only（不含 IMAP 权限）',

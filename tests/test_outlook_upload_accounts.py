@@ -1,5 +1,6 @@
 import importlib
 import os
+import pathlib
 import tempfile
 import unittest
 
@@ -13,6 +14,7 @@ if 'DATABASE_PATH' not in os.environ:
     os.environ['DATABASE_PATH'] = os.path.join(_temp_dir, 'test.db')
 
 web_outlook_app = importlib.import_module('web_outlook_app')
+ROOT_DIR = pathlib.Path(__file__).resolve().parents[1]
 
 
 class OutlookUploadSchemaTests(unittest.TestCase):
@@ -137,6 +139,42 @@ class OutlookUploadDataLayerTests(unittest.TestCase):
                          ['added', 'duplicate', 'invalid'])
         self.assertEqual([r['email'] for r in summary['results']],
                          ['new1@outlook.com', 'exists@outlook.com', 'bad'])
+
+    def test_query_upload_accounts_page_includes_matching_formal_account_tags(self):
+        email = 'tagged-upload@outlook.com'
+        formal_email = 'Tagged-Upload@Outlook.com'
+        tag_names = {'自动授权', '重点'}
+
+        with self.app.app_context():
+            db = web_outlook_app.get_db()
+            db.execute(
+                'DELETE FROM account_tags WHERE account_id IN (SELECT id FROM accounts WHERE LOWER(email) = ?)',
+                (email,),
+            )
+            db.execute('DELETE FROM accounts WHERE LOWER(email) = ?', (email,))
+            db.execute(
+                'DELETE FROM account_tags WHERE tag_id IN (SELECT id FROM tags WHERE name IN (?, ?))',
+                tuple(tag_names),
+            )
+            db.execute(
+                'DELETE FROM tags WHERE name IN (?, ?)',
+                tuple(tag_names),
+            )
+            db.commit()
+
+            self.assertTrue(web_outlook_app.add_account(formal_email, 'formal-password'))
+            account = web_outlook_app.get_account_by_email(email)
+            for name in tag_names:
+                tag_id = web_outlook_app.add_tag(name, '#0078d4')
+                self.assertIsNotNone(tag_id)
+                self.assertTrue(web_outlook_app.add_account_tag(account['id'], tag_id))
+            web_outlook_app.add_upload_account(email, 'upload-password', 'from formal account')
+            db.commit()
+
+            result = web_outlook_app.query_upload_accounts_page(page=1, page_size=10)
+
+        item = next(item for item in result['items'] if item['email'] == email)
+        self.assertCountEqual([tag['name'] for tag in item['tags']], tag_names)
 
 
 class OutlookUploadRequeueTests(unittest.TestCase):
@@ -321,7 +359,7 @@ class OutlookUploadRouteTests(unittest.TestCase):
         self.assertNotEqual(row['password'], 'secret')
         self.assertEqual(web_outlook_app.decrypt_data(row['password']), 'secret')
 
-    def test_list_upload_accounts_masks_password(self):
+    def test_list_upload_accounts_returns_password_for_table_reveal(self):
         with self.app.app_context():
             web_outlook_app.add_upload_account('list@outlook.com', 'secret', 'n')
             web_outlook_app.get_db().commit()
@@ -333,7 +371,7 @@ class OutlookUploadRouteTests(unittest.TestCase):
         payload = response.get_json()
         self.assertTrue(payload['success'])
         item = next(item for item in payload['items'] if item['email'] == 'list@outlook.com')
-        self.assertNotIn('password', item)
+        self.assertEqual(item['password'], 'secret')
         self.assertTrue(item['has_password'])
         self.assertEqual(item['password_length'], len('secret'))
 
@@ -355,6 +393,7 @@ class OutlookUploadRouteTests(unittest.TestCase):
         self.assertTrue(payload['success'])
         items = {item['email']: item for item in payload['items']}
         self.assertTrue(items['good@outlook.com']['has_password'])
+        self.assertEqual(items['good@outlook.com']['password'], 'secret')
         self.assertFalse(items['bad@outlook.com']['has_password'])
         self.assertEqual(items['bad@outlook.com']['password_length'], 0)
 
@@ -385,6 +424,67 @@ class OutlookUploadRouteTests(unittest.TestCase):
     def test_route_is_marked_api_key_required(self):
         view = self.app.view_functions['api_external_upload_outlook']
         self.assertTrue(getattr(view, '_requires_api_key', False))
+
+
+class OutlookUploadFrontendStructureTests(unittest.TestCase):
+    def test_upload_accounts_table_does_not_show_id_column(self):
+        html = (ROOT_DIR / 'templates' / 'partials' / 'index' / 'dialogs-management.html').read_text(encoding='utf-8')
+        js = (ROOT_DIR / 'static' / 'js' / 'index' / '12-outlook-upload-accounts.js').read_text(encoding='utf-8')
+
+        self.assertNotIn('<th style="width: 42px; min-width: 42px;">ID</th>', html)
+        self.assertIn('<td colspan="7" class="upload-accounts-empty">正在加载...</td>', html)
+        self.assertIn('<tr class="upload-accounts-row--editing" data-editing-id="${escapeHtml(String(itemId))}">', js)
+        self.assertNotIn('<td>${escapeHtml(String(itemId))}</td>', js)
+        self.assertIn('<tr><td colspan="7" class="upload-accounts-empty">暂无数据</td></tr>', js)
+        self.assertIn('<tr><td colspan="7" class="upload-accounts-empty">正在加载...</td></tr>', js)
+
+    def test_upload_accounts_table_shows_tags_column(self):
+        html = (ROOT_DIR / 'templates' / 'partials' / 'index' / 'dialogs-management.html').read_text(encoding='utf-8')
+        js = (ROOT_DIR / 'static' / 'js' / 'index' / '12-outlook-upload-accounts.js').read_text(encoding='utf-8')
+
+        self.assertIn('<th style="width: 120px; min-width: 100px;">标签</th>', html)
+        self.assertIn('function formatUploadAccountTags(tags)', js)
+        self.assertIn('<td>${formatUploadAccountTags(item.tags)}</td>', js)
+
+    def test_upload_accounts_table_alignment_rules(self):
+        html = (ROOT_DIR / 'templates' / 'partials' / 'index' / 'dialogs-management.html').read_text(encoding='utf-8')
+        js = (ROOT_DIR / 'static' / 'js' / 'index' / '12-outlook-upload-accounts.js').read_text(encoding='utf-8')
+
+        self.assertIn('text-align: center;', html)
+        self.assertIn('.upload-accounts-cell-right', html)
+        self.assertIn('text-align: right;', html)
+        self.assertIn('justify-content: center;', html)
+        self.assertIn('<td class="upload-accounts-cell-mono upload-accounts-cell-right">', js)
+        self.assertIn('<td class="upload-accounts-cell-right">', js)
+
+    def test_upload_accounts_table_reserves_space_during_pagination_loading(self):
+        html = (ROOT_DIR / 'templates' / 'partials' / 'index' / 'dialogs-management.html').read_text(encoding='utf-8')
+
+        table_wrap_css = html.split('.upload-accounts-table-wrap {', 1)[1].split('}', 1)[0]
+        table_css = html.split('.upload-accounts-table {', 1)[1].split('}', 1)[0]
+
+        self.assertIn('min-height: 410px;', table_wrap_css)
+        self.assertIn('table-layout: fixed;', table_css)
+        self.assertIn('min-width: 912px;', table_css)
+
+    def test_table_password_uses_eye_toggle(self):
+        js = (ROOT_DIR / 'static' / 'js' / 'index' / '12-outlook-upload-accounts.js').read_text(encoding='utf-8')
+
+        self.assertIn('toggleUploadAccountPasswordVisibility', js)
+        self.assertIn('data-upload-account-password', js)
+        self.assertIn('upload-accounts-password-mask', js)
+        self.assertIn('aria-label="显示密码"', js)
+        self.assertIn("'隐藏密码'", js)
+        self.assertNotIn('<td class="upload-accounts-cell-mono">${escapeHtml(formatUploadAccountPassword(item))}</td>', js)
+
+    def test_table_password_reveal_does_not_inline_password_in_graph_auth_button(self):
+        js = (ROOT_DIR / 'static' / 'js' / 'index' / '12-outlook-upload-accounts.js').read_text(encoding='utf-8')
+
+        auth_button_start = js.index('const authBtn =')
+        auth_button_end = js.index('const editBtn =', auth_button_start)
+        auth_button_js = js[auth_button_start:auth_button_end]
+        self.assertNotIn('data-upload-account-password', auth_button_js)
+        self.assertNotIn('item.password ||', auth_button_js)
 
 
 class OutlookUploadUpdateRouteTests(unittest.TestCase):

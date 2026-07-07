@@ -1143,9 +1143,9 @@
 
     <!-- Outlook 上传账号模态框 -->
     <div class="modal" id="outlookUploadAccountsModal" onmousedown="if(event.target === this) hideOutlookUploadAccountsModal()">
-        <div class="modal-content" style="width: min(1380px, 96vw);">
+        <div class="modal-content" style="width: min(1500px, 96vw);">
             <div class="modal-header">
-                <h3>Outlook自动化授权</h3>
+                <h3>Outlook邮箱授权</h3>
                 <button class="modal-close" onclick="hideOutlookUploadAccountsModal()">&times;</button>
             </div>
             <div class="modal-body">
@@ -1163,7 +1163,7 @@
                                     <div class="add-form-field add-form-field--email">
                                         <label class="add-form-label">邮箱前缀</label>
                                         <input type="text" id="addUploadAccountEmailPrefix" class="form-input add-form-input"
-                                            placeholder="sccd952701" autocomplete="off">
+                                            placeholder="abcd1234" autocomplete="off">
                                     </div>
                                     <div class="add-form-field add-form-field--domain">
                                         <label class="add-form-label">域名</label>
@@ -1199,10 +1199,10 @@
                             <table class="upload-accounts-table">
                                 <thead>
                                     <tr>
-                                        <th style="width: 42px; min-width: 42px;">ID</th>
                                         <th style="width: 200px; min-width: 160px;">邮箱</th>
                                         <th style="width: 80px; min-width: 70px;">密码</th>
                                         <th style="width: 72px; min-width: 72px;">授权</th>
+                                        <th style="width: 120px; min-width: 100px;">标签</th>
                                         <th style="width: 100px; min-width: 80px;">备注</th>
                                         <th style="width: 130px; min-width: 120px;">创建时间</th>
                                         <th style="width: 210px; min-width: 210px;">操作</th>
@@ -1241,7 +1241,7 @@
                                 <span>Graph-only（不含 IMAP 权限）</span>
                             </label>
                         </div>
-                        <div id="graphAuthLog" class="upload-accounts-auth__log">点击账号「去授权 / 重新授权」后，授权日志会显示在这里。</div>
+                        <div id="graphAuthLog" class="upload-accounts-auth__log">点击账号「授权 / 重新授权」后，授权日志会显示在这里。</div>
                     </aside>
                 </div>
             </div>
@@ -1379,19 +1379,22 @@
             min-width: 180px;
         }
         .upload-accounts-table-wrap {
+            min-height: 410px;
             overflow-x: auto;
             border: 1px solid var(--border-color, #e5e7eb);
             border-radius: 8px;
         }
         .upload-accounts-table {
             width: 100%;
+            min-width: 912px;
             border-collapse: collapse;
+            table-layout: fixed;
             font-size: 13px;
         }
         .upload-accounts-table th,
         .upload-accounts-table td {
             padding: 8px 10px;
-            text-align: left;
+            text-align: center;
             border-bottom: 1px solid var(--border-color, #eef0f3);
             white-space: nowrap;
             overflow: hidden;
@@ -1401,6 +1404,7 @@
             display: flex;
             gap: 10px;
             align-items: center;
+            justify-content: center;
         }
         .upload-accounts-table th {
             background: var(--table-head-bg, #f6f7f9);
@@ -1424,6 +1428,12 @@
         .upload-accounts-cell-mono {
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
+        .upload-accounts-table td.upload-accounts-cell-right {
+            text-align: right;
+        }
+        .upload-accounts-cell-right .upload-accounts-edit-input {
+            text-align: right;
+        }
         .upload-accounts-badge {
             display: inline-block;
             padding: 2px 8px;
@@ -1438,6 +1448,22 @@
         .upload-accounts-badge--no {
             background: rgba(107, 114, 128, 0.15);
             color: #4b5563;
+        }
+        .upload-accounts-tags {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            max-width: 100%;
+            min-width: 0;
+        }
+        .upload-accounts-tag-pill {
+            max-width: 72px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .upload-accounts-tag-pill.account-status-pill.tag:hover {
+            padding-right: 10px;
         }
         .upload-accounts-pagination {
             display: flex;
@@ -1577,6 +1603,50 @@
         .upload-accounts-row--editing td {
             padding: 8px 10px !important;
             vertical-align: middle;
+        }
+        .upload-accounts-password {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            max-width: 100%;
+            min-height: 24px;
+        }
+        .upload-accounts-password-text {
+            display: inline-block;
+            max-width: 108px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        .upload-accounts-password-mask {
+            letter-spacing: 1px;
+        }
+        .upload-accounts-password-toggle {
+            width: 24px;
+            height: 24px;
+            flex: 0 0 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: #4b5563;
+            cursor: pointer;
+            transition: background-color 0.15s, color 0.15s;
+        }
+        .upload-accounts-password-toggle:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+        .upload-accounts-password-toggle:focus-visible {
+            outline: 2px solid #1a1a1a;
+            outline-offset: 2px;
+        }
+        .upload-accounts-password-toggle svg {
+            width: 16px;
+            height: 16px;
         }
         .upload-accounts-edit-input {
             width: 100%;
