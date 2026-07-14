@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [2.8.4] - 2026-07-14
+
+### Security
+- 修改登录密码时必须验证当前密码（`current_login_password`），防止已登录会话被冒用改密。
+- 改密成功后轮换登录会话版本：当前改密会话保持有效，其他已登录 Web Session 需重新登录。
+
+### Changed
+- 系统设置弹窗登录密码改为「当前密码 + 新密码」双输入；未填新密码时仍可不修改。
+- `PUT /api/settings` 修改 `login_password` 时同步要求提供正确的 `current_login_password`；扩展登录一次性 token 也会绑定会话版本。
+
+### Fixed
+- 升级前未写入会话版本的旧 Session：仅在尚未发生密码轮换时继续有效，避免误伤；一旦改密则全部失效。
+
+## [2.8.3] - 2026-07-14
+
+### Added
+- Outlook 邮箱授权弹窗新增四种添加 / 授权方式说明：批量导入、🔑 授权并保存、重新授权并刷新，以及当前页自动化授权的入口位置与区别。
+- 说明区提供快捷按钮，可直接跳转到批量导入邮箱或 🔑 授权并保存弹窗。
+
 ## [2.8.2] - 2026-07-10
 
 ### Changed
