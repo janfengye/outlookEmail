@@ -6,6 +6,19 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [3.0.17] - 2026-10-16
+
+### Fixed
+- 阿里云等 IMAP 服务器拒绝 SEARCH 命令时回退序列号枚举（#93）：此前 IMAP 服务器对 `UID SEARCH` 与 `SEARCH` 均返回 NO/BAD（阿里云对不支持的参数返回 `BAD invalid command or parameters`）时，整个邮箱直接报 `IMAP_SEARCH_FAILED` 502 无法浏览。现在当两次 SEARCH 均为协议级拒绝（连接仍可用）且 SELECT 返回 EXISTS > 0 时，回退为按序列号 1..N 枚举取信；超时/连接中断等异常不回退，仍返回 502 以免 FETCH 必挂。
+
+## [3.0.16] - 2026-10-16
+
+### Fixed
+- 分享管理时间按应用时区显示（#94）：后端 `expires_at` / `created_at` 为无时区标记的 UTC 字符串，此前表格原样展示，非 UTC 部署（如东八区）下创建/过期时间早 8 小时。「有效期至」「创建时间」及创建分享弹窗的「有效期」统一改用 `formatAbsoluteDateTime` 按设置 → 应用时区转换，悬停创建时间仍显示 UTC 原始值。
+
+### Changed
+- 邮箱面板头部布局精简：头部动作按钮从 6 个图标收敛为「刷新 / 授权并保存（临时邮箱为生成临时邮箱）/ 导入 / 更多」4 个，批量选择、管理标签、切换极简展示收进「更多」下拉菜单；菜单项带激活高亮与对勾，批量选择或极简展示激活时「更多」按钮右上角显示蓝色圆点；刷新按钮补上加载旋转动画。
+
 ## [3.0.15] - 2026-10-14
 
 ### Added
